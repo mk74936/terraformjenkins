@@ -46,41 +46,35 @@ pipeline {
             }
         }
 
-        stage('Deploy EventBridge') {
+        stage('Terraform Init') {
             steps {
-                dir('eventbridge') {
-                    sh '''
-                        terraform init
-                        terraform validate
-                        terraform plan -out=tfplan
-                        terraform apply -auto-approve tfplan
-                    '''
+                dir('main') {
+                    sh 'terraform init'
                 }
             }
         }
 
-        stage('Deploy SNS') {
+        stage('Terraform Validate') {
             steps {
-                dir('sns') {
-                    sh '''
-                        terraform init
-                        terraform validate
-                        terraform plan -out=tfplan
-                        terraform apply -auto-approve tfplan
-                    '''
+                dir('main') {
+                    sh 'terraform validate'
                 }
             }
         }
 
-        stage('Deploy Lambda') {
+        stage('Terraform Plan') {
             steps {
-                dir('lambda') {
-                    sh '''
-                        terraform init
-                        terraform validate
-                        terraform plan -out=tfplan
-                        terraform apply -auto-approve tfplan
-                    '''
+                dir('main') {
+                    sh 'terraform plan -out=tfplan'
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                input message: 'Apply the Terraform plan?'
+                dir('main') {
+                    sh 'terraform apply tfplan'
                 }
             }
         }
