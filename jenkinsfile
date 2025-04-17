@@ -1,0 +1,94 @@
+pipeline {
+    agent any
+
+    environment {
+        ROLE_ARN     = 'arn:aws:iam::123456789012:role/YourTerraformRole'
+        SESSION_NAME = 'jenkins-terraform-session'
+        AWS_REGION   = 'us-east-1'
+    }
+
+    stages {
+        stage('Check AWS CLI Installed') {
+            steps {
+                script {
+                    def result = sh(script: 'which aws || true', returnStdout: true).trim()
+                    if (!result) {
+                        error "❌ AWS CLI is not installed on this Jenkins agent."
+                    }
+                    echo "✅ AWS CLI found at: ${result}"
+                }
+            }
+        }
+
+        stage('Checkout Code') {
+            steps {
+                git url: 'https://your-repo-url.git', branch: 'main'
+            }
+        }
+
+        stage('Assume IAM Role') {
+            steps {
+                script {
+                    def credsJson = sh(script: """
+                        aws sts assume-role \
+                          --role-arn ${ROLE_ARN} \
+                          --role-session-name ${SESSION_NAME} \
+                          --region ${AWS_REGION} \
+                          --output json
+                    """, returnStdout: true).trim()
+
+                    def creds = readJSON text: credsJson
+
+                    env.AWS_ACCESS_KEY_ID     = creds.Credentials.AccessKeyId
+                    env.AWS_SECRET_ACCESS_KEY = creds.Credentials.SecretAccessKey
+                    env.AWS_SESSION_TOKEN     = creds.Credentials.SessionToken
+                }
+            }
+        }
+
+        stage('Deploy EventBridge') {
+            steps {
+                dir('eventbridge') {
+                    sh '''
+                        terraform init
+                        terraform validate
+                        terraform plan -out=tfplan
+                        terraform apply -auto-approve tfplan
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy SNS') {
+            steps {
+                dir('sns') {
+                    sh '''
+                        terraform init
+                        terraform validate
+                        terraform plan -out=tfplan
+                        terraform apply -auto-approve tfplan
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Lambda') {
+            steps {
+                dir('lambda') {
+                    sh '''
+                        terraform init
+                        terraform validate
+                        terraform plan -out=tfplan
+                        terraform apply -auto-approve tfplan
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
